@@ -8,6 +8,17 @@
 
 
 
+
+#define CHECK_ERROR(error_ptr, msg) \
+    if (error_ptr) { \
+        std::cerr << msg << ": " << (error_ptr->message ? error_ptr->message : "Unknown error") << std::endl; \
+        g_error_free(error_ptr); \
+        error_ptr = NULL; \
+    }
+
+
+
+
 using namespace std;
 using namespace cv;
 
@@ -31,7 +42,8 @@ public:
     void StopCamera();
     void SoftTrigger(int);
     void SetExposure(double,double,int,String);
-    int GetExposure(string);
+    double GetExposure(string);
+    double GetGamma(string);
     unsigned int NoOfCamera;
     vector<ImageSources> img_src_id;  
     vector<ArvCamera*> cameras;   

@@ -18,7 +18,8 @@ $(Target) : $(Source) $(Main)
 
 
 clean:
-	rm $(Target)
+	rm $(Target) *.png
+	
 
 
 .PHONY: clean all
