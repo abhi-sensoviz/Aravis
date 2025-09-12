@@ -4,8 +4,8 @@ flags= -Wall -O2 -I./header $(shell pkg-config --cflags opencv4 aravis-0.10)
 
 libs = $(shell pkg-config --libs opencv4 aravis-0.10)
 
-Source = src/CameraHandler.cpp 
-Header = header/CameraHandler.h 
+Source = src/ExtTrig.cpp 
+Header = header/ExtTrig.h 
 
 Main= cam.cpp
 Target= cam

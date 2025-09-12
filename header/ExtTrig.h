@@ -5,6 +5,7 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 #include <arv.h>
+#include <stdexcept> 
 
 
 
@@ -15,7 +16,6 @@
         g_error_free(error_ptr); \
         error_ptr = NULL; \
     }
-
 
 
 
@@ -35,21 +35,34 @@ struct ImageSources {
     int TriggerType = 0;
 };
 
-class CameraHandler {
+class ExtTrig {
 public:
-    CameraHandler();  
-    void PrepareCamera();       
+    ExtTrig();  
+    int InitiallizeBuffers();
+    int PrepareCamera();       
     void StopCamera();
     void SoftTrigger(int);
     void SetExposure(double,double,int,String);
     double GetExposure(string);
     double GetGamma(string);
+    int InitCameraSerialDetails();
+    int MapCamerainOrder();
+    //void ExtTrig::convertImage(Mat,int,int);
     unsigned int NoOfCamera;
-    vector<ImageSources> img_src_id;  
-    vector<ArvCamera*> cameras;   
+    vector<ImageSources> img_src;  
+    ArvCamera** camera;   
     vector<ArvBuffer*> buffers;
     vector<ArvStream*> streams;
+    vector<String> cam_sr_no_str;
     
+    
+    vector<gint> CamWd;
+    vector<gint> CamHt;
+    vector<guint64> CamTickFreq;
+    vector<bool> flag;
+
+
+    int gImageCounter = 0;
 
 };
 
