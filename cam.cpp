@@ -1,6 +1,7 @@
 #include<stdlib.h>
 #include<ExtTrig.h>
 
+
 int main(){
 	int id=0;
 	GError* error=NULL;
@@ -21,39 +22,23 @@ int main(){
 
 
 
-	arv_stream_push_buffer(cam->streams[id], cam->buffers[id]); //pushing buffer to stream 1
-	CHECK_ERROR(error, "Error starting acquisiton mode");
+	// arv_stream_push_buffer(cam->streams[id], cam->buffers[id]); 
+	// g_signal_connect(stream[], "new-buffer", G_CALLBACK(new_buffer_callback), NULL);
 
 
 	cam->SoftTrigger(id);  //triggring camera here
 	cout << "Triggered camera"<< endl;
 
-		
-		
-	cam->buffers[id]=arv_stream_pop_buffer(cam->streams[id]); //poping buffer from stream
+	
+	cout << String(arv_camera_get_device_serial_number(cam,&error))<<endl;
 	
 	
-	if (!cam->buffers[id] || arv_buffer_get_status(cam->buffers[id]) != ARV_BUFFER_STATUS_SUCCESS) {
-    		cerr << "Failed to get image from camera" << endl;
-    		return 1;
+
+
+	//cout << cam->GetCameraTickCount(cam->img_src[id].cam_sr_no) <<endl;
+	if(!cam->CheckCamConnection(id)){
+		cam->StopCamera();
 	}
-	
-	
-	//converting to cv::MAT
-	
-	cam->img_src[id].Width= arv_buffer_get_image_width(cam->buffers[id]);
-	cam->img_src[id].Height= arv_buffer_get_image_height(cam->buffers[id]);
-	
-	//getting data from buffer
-	const void* data = arv_buffer_get_data(cam->buffers[id],NULL); 
-
-
-	Mat image(cam->img_src[id].Height,cam->img_src[id].Width, CV_8UC1, (void*) data);
-	imwrite("sample.png", image);
-	cout << "saved Image" << endl;
-	
-	
-	cam->StopCamera();
 	
 	
 	

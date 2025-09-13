@@ -6,6 +6,7 @@
 #include <opencv2/opencv.hpp>
 #include <arv.h>
 #include <stdexcept> 
+#include <signal.h>
 
 
 
@@ -33,7 +34,23 @@ struct ImageSources {
     int currentIndex = 0;
     bool pathAssigned = false;
     int TriggerType = 0;
+    
 };
+
+struct CallBackData{
+    ArvCamera* cam;
+    ArvBuffer* buffer;
+    ArvStream* stream;
+    vector<ImageSources>* img_src;
+    int index;
+};
+
+class CImageEventPrinter {
+public:
+    static void OnImageGrabbed(ArvStream* , gpointer );
+    static void convertImage(ArvBuffer* ,ArvStream* ,unsigned int , int );
+};
+
 
 class ExtTrig {
 public:
@@ -47,8 +64,13 @@ public:
     double GetGamma(string);
     int InitCameraSerialDetails();
     int MapCamerainOrder();
-    //void ExtTrig::convertImage(Mat,int,int);
-    unsigned int NoOfCamera;
+    bool CheckCamConnection( int);
+    double GetCameraTickCount(string );
+    void ChangeTriggerToSoftwareType();
+    // void OnImageGrabbed(ArvCamera* ,ArvBuffer*,ArvStream*);
+    // void convertImage(ArvBuffer*,ArvStream*,unsigned int,int);
+
+    unsigned int NoOfCamera=1;
     vector<ImageSources> img_src;  
     ArvCamera** camera;   
     vector<ArvBuffer*> buffers;
@@ -63,6 +85,10 @@ public:
 
 
     int gImageCounter = 0;
+
+
+    int ImgSourceMode=1;
+    
 
 };
 

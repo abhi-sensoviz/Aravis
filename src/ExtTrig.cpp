@@ -1,5 +1,6 @@
 #include "ExtTrig.h"
 #include <iostream>
+
 vector<int> Cam_time_gap;
 vector<double> str_str;
 vector<bool> run_started;
@@ -8,13 +9,13 @@ vector<int> part_id;
 
 
 ExtTrig::ExtTrig() {
-    arv_update_device_list();  // refresh camera list
-   
+    arv_update_device_list();// refresh camera list
+	cam_sr_no_str.push_back("serialno");
+   	
 }
 
 
-
-
+//same as app
 int ExtTrig::InitiallizeBuffers(){
    
     camera = new ArvCamera*[NoOfCamera];
@@ -48,8 +49,7 @@ int ExtTrig::InitiallizeBuffers(){
 		// /cout<< NoOfCamera<<endl;
 		
     }
-    for(unsigned int i=0;i<NoOfCamera;i++)
-    {
+    for(unsigned int i=0;i<NoOfCamera;i++){
         str_str[i]=0;
         run_started[i]=false;;
         part_received[i]=false;
@@ -70,6 +70,49 @@ int ExtTrig::InitiallizeBuffers(){
 
 }
 
+//check camera connections -
+bool ExtTrig:: CheckCamConnection( int id)
+{
+    unsigned int j=0;
+	GError* error=NULL;
+    if(ImgSourceMode==1){
+        try{
+            for(j=0;j<NoOfCamera;j++){
+                if(camera[j]){
+					
+					string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+					CHECK_ERROR(error, "Camera "+to_string(j)+" Not Connected");
+					if(img_src[id].cam_sr_no==sr_no) break;
+				}
+	        }
+	
+            if(j<NoOfCamera&&j>=0){
+				arv_update_device_list();//bottle neck
+                if(! arv_get_device_model(j)){
+                    cam_sr_no_str[j]="";
+                    return false   ;
+                }
+            }
+        }catch (const runtime_error& e){
+        	// Error handling.
+        	cerr << "An exception occurred. 10" << endl
+			<< e.what() << endl;
+  	     	return false;
+    	}
+    	return true; 
+	}
+    else{
+        if(img_src[id].pathAssigned==true){
+            return true;
+        }
+        else{
+            return false;
+        }
+
+    }
+
+}
+
 //prepare camera
 int ExtTrig::PrepareCamera(){
 	try{
@@ -78,9 +121,12 @@ int ExtTrig::PrepareCamera(){
 		unsigned int TotalConnectedCameras=arv_get_n_devices();
 
 		NoOfCamera= arv_get_n_devices(); //is configured in s/w comment this out
+		if(TotalConnectedCameras==0){
+			throw runtime_error("No Cameras Found");
+		}
 		if(NoOfCamera>TotalConnectedCameras){
 			String text= "Make sure all camera are conneced only "+to_string(TotalConnectedCameras) + "detected";
-			cout << text << endl;
+			throw runtime_error("Error:"+text);
 			//QMessageBox::information(nullptr, "Camera Error", QString::fromStdString(text));
 		}
 
@@ -169,8 +215,6 @@ int ExtTrig::PrepareCamera(){
 
 
 			
-		
-
 
 				//setting gamma and exposure
 				arv_camera_set_exposure_time(cam, 400, &error);
@@ -179,10 +223,6 @@ int ExtTrig::PrepareCamera(){
 				arv_camera_set_float(cam, "Gamma", 0.5, &error);
 				CHECK_ERROR(error, "Failed to set gamma");
 
-
-				
-
-		
 				
 
 				//pushing camera 
@@ -207,14 +247,30 @@ int ExtTrig::PrepareCamera(){
 				arv_camera_start_acquisition(cam,&error);		
 				CHECK_ERROR(error, "Failed to start acquisiton");
 
+
+
+				CallBackData *data=new CallBackData();
+				data->buffer=buffers[i];
+				data->cam=camera[i];
+				data->stream=streams[i];
+				data->img_src=&img_src;
+				data->index=i;
+
+				//pushing buffer to stream
+				arv_stream_push_buffer(streams[i],buffers[i]); 
+
+
+				g_signal_connect(streams[i], "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), data);
+				arv_stream_set_emit_signals(streams[i],true);
+			
+
 				
 							
 					
 				
 			}
 		}
-	} catch (const runtime_error& e)
-    {
+	} catch (const runtime_error& e){
         // Error handling.
         cerr << "An exception occurred. 10" << endl
              << e.what() << endl;
@@ -226,11 +282,11 @@ int ExtTrig::PrepareCamera(){
 
 }
 
-//init cameraSerialDetails
+//init cameraSerialDetails -
 int ExtTrig::InitCameraSerialDetails(){
 	
 	GError* error=NULL;	
-	for(int j=0;j<NoOfCamera;j++)
+	for(unsigned int j=0;j<NoOfCamera;j++)
 	{
 		img_src[j].cam_sr_no=arv_camera_get_device_serial_number(camera[j],&error);
 		CHECK_ERROR(error, "Failed to get gamma");
@@ -281,64 +337,64 @@ void ExtTrig::SoftTrigger(int id){
 
 }
 
+//map camera in oreder same as app
 int ExtTrig::MapCamerainOrder(){
-    for(int i = 0; i < NoOfCamera; i++)
-    {
-        if(cam_sr_no_str[i] == "")
-        {
-            return -1;
-        }
-    }
+    // for(int i = 0; i < NoOfCamera; i++)
+    // {
+    //     if(cam_sr_no_str[i] == "")
+    //     {
+    //         return -1;
+    //     }
+    // }
 
-    for(int i = 0; i < NoOfCamera; i++)
-    {
-        for(int j = 0; j < NoOfCamera; j++)
-        {
-            if(cam_sr_no_str[j] == img_src[i].cam_sr_no)
-            {
-                img_src[i].Width = CamWd[j];
-                img_src[i].Height = CamHt[j];
-                img_src[i].tickFrequency = CamTickFreq[j];
+    // for(int i = 0; i < NoOfCamera; i++)
+    // {
+    //     for(int j = 0; j < NoOfCamera; j++)
+    //     {
+    //         if(cam_sr_no_str[j] == img_src[i].cam_sr_no)
+    //         {
+    //             img_src[i].Width = CamWd[j];
+    //             img_src[i].Height = CamHt[j];
+    //             img_src[i].tickFrequency = CamTickFreq[j];
 
-                // Default width and height adjustments
-                int tempWidth = int(((double)img_src[i].Width / (double)img_src[i].Height) * ImageWidthSize);
-                int tempHeight = int(((double)img_src[i].Height / (double)img_src[i].Width) * ImageWidthSize);
+    //             // Default width and height adjustments
+    //             int tempWidth = int(((double)img_src[i].Width / (double)img_src[i].Height) * ImageWidthSize);
+    //             int tempHeight = int(((double)img_src[i].Height / (double)img_src[i].Width) * ImageWidthSize);
 
-                if (img_src[i].Width > img_src[i].Height)
-                {
-                    // If width is dominant, adjust height accordingly
-                    CamWnd_W[i] = ImageWidthSize;
-                    CamWnd_H[i] = tempHeight;
-                }
-                else
-                {
-                    // If height is dominant, adjust width accordingly
-                    CamWnd_H[i] = ImageWidthSize;
-                    CamWnd_W[i] = tempWidth;
-                }
+    //             if (img_src[i].Width > img_src[i].Height)
+    //             {
+    //                 // If width is dominant, adjust height accordingly
+    //                 CamWnd_W[i] = ImageWidthSize;
+    //                 CamWnd_H[i] = tempHeight;
+    //             }
+    //             else
+    //             {
+    //                 // If height is dominant, adjust width accordingly
+    //                 CamWnd_H[i] = ImageWidthSize;
+    //                 CamWnd_W[i] = tempWidth;
+    //             }
 
-                // Ensure it does not exceed maximum width constraints
-                if (CamWnd_W[i] > 670)
-                {
-                    CamWnd_W[i] = 670;
-                    CamWnd_H[i] = int(((double)img_src[i].Height / (double)img_src[i].Width) * CamWnd_W[i]);
-                }
+    //             // Ensure it does not exceed maximum width constraints
+    //             if (CamWnd_W[i] > 670)
+    //             {
+    //                 CamWnd_W[i] = 670;
+    //                 CamWnd_H[i] = int(((double)img_src[i].Height / (double)img_src[i].Width) * CamWnd_W[i]);
+    //             }
 
-                // Ensure it does not exceed maximum height constraints
-                if (CamWnd_H[i] > 670)
-                {
-                    CamWnd_H[i] = 670;
-                    CamWnd_W[i] = int(((double)img_src[i].Width / (double)img_src[i].Height) * CamWnd_H[i]);
-                }
+    //             // Ensure it does not exceed maximum height constraints
+    //             if (CamWnd_H[i] > 670)
+    //             {
+    //                 CamWnd_H[i] = 670;
+    //                 CamWnd_W[i] = int(((double)img_src[i].Width / (double)img_src[i].Height) * CamWnd_H[i]);
+    //             }
 
-                break;
-            }
-        }
-    }
+    //             break;
+    //         }
+    //     }
+    // }
 
-    return 0;
+    // return 0;
 }
-
 
 //function to SetExposure also gamma
 void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
@@ -484,14 +540,152 @@ double ExtTrig::GetGamma(string id){
 
 }
 
+//get camera TickCount -
+double ExtTrig::GetCameraTickCount(string id){
+
+
+#if !INTERFACE
+    unsigned int j=0;
+	GError* error=NULL;
+	try{
+		//getting camera index	
+		for(j=0;j<NoOfCamera;j++){
+			if(camera[j]){
+					
+				string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+				CHECK_ERROR(error, "Error in get Exposure Function ");
+				if(id==sr_no)break;
+			}
+		}
+
+        if(j<NoOfCamera&&j>=0) {
+           
+
+        // Retrieve the latched timestamp value
+        	int64_t timestamp = arv_buffer_get_timestamp(buffers[j]);
+            return timestamp; 
+        } else {
+            cout << "tick count not proer" << endl;
+            return 0;
+        }
+
+    }
+	catch (exception& e){
+		cerr << "Exception caught :" << e.what() << endl;
+	}
+	return 0;
+#else
+
+    return -1;
+
+#endif
+}
+
+void ExtTrig::ChangeTriggerToSoftwareType()
+{
+    try
+    {
+
+        for(unsigned int i=0;i<NoOfCamera;i++)
+        {
+            for(unsigned int j=0;j<NoOfCamera;j++)
+            {
+                if(cam_sr_no_str[j]==img_src[i].cam_sr_no)//HEAD_BACKLIGHT
+                    //if(j==1 || j==3)
+                {
+					GError* error=NULL;
+                    cout<<"img_src[i].cam_sr_no: "<<img_src[i].cam_sr_no<<" img_src[i].TriggerType: "<<"Software"<<j<<endl;
+
+					arv_camera_set_string(camera[j], "TriggerMode", "On", &error);
+					CHECK_ERROR(error, "Error in setting camera to Trigger Mode");
+				
+			
+					arv_camera_set_string(camera[j], "TriggerSource", "Software", &error);
+					CHECK_ERROR(error, "Error in setting TriggerSource software");
+				
+			
+					arv_device_set_string_feature_value(arv_camera_get_device(camera[j]), "TriggerActivation", "RisingEdge",&error);
+					CHECK_ERROR(error, "Failed to set TriggerActivation");
+			
+
+                }
+            }
+        }
 
 
 
-//TODO:virtual void OnImageGrabbed( CInstantCamera& camera, const CGrabResultPtr& ptrGrabResult)
+    }
+    catch (const exception &e){
+        // Error handling.
+        cerr << "An exception occurred. 8" << endl
+             << e.what() << endl;
+
+
+    }
+
+}
+
+
+
+//callback function On execution of soft trigger function
+void CImageEventPrinter::OnImageGrabbed(ArvStream* stream, gpointer user_data){
+	unsigned int NoOfCamera=1;
+	int gImageCounter=0;
+
+	CallBackData* data = static_cast<CallBackData*>(user_data);
+	GError* error=NULL;
+	unsigned int j=0;
+
+	try{
+		// //getting camera index	
+		// for(j=0;j<NoOfCamera;j++){
+		// 	if(data->cam){    				__________________________-> cant read during trigger mode
+					
+		// 		string sr_no=String(arv_camera_get_device_serial_number(data->cam,&error));
+		// 		CHECK_ERROR(error, "Error in callback function (cannot get serial no:)");
+		// 		if((*(data->img_src))[j].cam_sr_no==sr_no)break;//change img_src later
+		// 	}
+		// }
+		if (data->buffer==NULL || arv_buffer_get_status(data->buffer) != ARV_BUFFER_STATUS_SUCCESS) {
+			cerr << "Failed to get image from camera" << endl;
+			return;
+		}else{
+			convertImage(data->buffer,data->stream,data->index,  gImageCounter);
+			gImageCounter++;
+		}
+		
+	}
+	catch (exception& e){
+		cerr << "Exception caught :" << e.what() << endl;
+	}
+
+
+}
+
+//dummy convert+save Image
+void CImageEventPrinter::convertImage(ArvBuffer* buffer,ArvStream* stream,unsigned int j, int gImageCounter){
+	
+	buffer=arv_stream_pop_buffer(stream);
+	int Width= arv_buffer_get_image_width(buffer);
+	int Height= arv_buffer_get_image_height(buffer);
+
+	//getting data from buffer
+	const void* data = arv_buffer_get_data(buffer,NULL); 
+
+	Mat image(Height,Width, CV_8UC1, (void*) data);
+	imwrite("sample.png", image);
+	cout << "saved Image" << endl;
+	arv_stream_push_buffer(stream,buffer); 
+
+
+
+}
+
+
+
+
 //TODO:void ExtTrig::ChangeTriggerType()
 //TODO:
-
-
 
 
 
