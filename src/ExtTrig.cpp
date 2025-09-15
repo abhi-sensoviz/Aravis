@@ -544,7 +544,7 @@ double ExtTrig::GetGamma(string id){
 double ExtTrig::GetCameraTickCount(string id){
 
 
-#if !INTERFACE
+#if INTERFACE
     unsigned int j=0;
 	GError* error=NULL;
 	try{
@@ -631,15 +631,16 @@ void ExtTrig::ChangeTriggerToSoftwareType()
 void CImageEventPrinter::OnImageGrabbed(ArvStream* stream, gpointer user_data){
 	unsigned int NoOfCamera=1;
 	int gImageCounter=0;
+	cerr<<"on image grabbed called"<<endl;
 
 	CallBackData* data = static_cast<CallBackData*>(user_data);
 	GError* error=NULL;
-	unsigned int j=0;
+	//unsigned int j=0;
 
 	try{
-		// //getting camera index	
+		// // //getting camera index	
 		// for(j=0;j<NoOfCamera;j++){
-		// 	if(data->cam){    				__________________________-> cant read during trigger mode
+		// 	if(data->cam){    			//	__________________________-> cant read during trigger mode
 					
 		// 		string sr_no=String(arv_camera_get_device_serial_number(data->cam,&error));
 		// 		CHECK_ERROR(error, "Error in callback function (cannot get serial no:)");
@@ -661,7 +662,6 @@ void CImageEventPrinter::OnImageGrabbed(ArvStream* stream, gpointer user_data){
 
 
 }
-
 //dummy convert+save Image
 void CImageEventPrinter::convertImage(ArvBuffer* buffer,ArvStream* stream,unsigned int j, int gImageCounter){
 	
@@ -680,7 +680,6 @@ void CImageEventPrinter::convertImage(ArvBuffer* buffer,ArvStream* stream,unsign
 
 
 }
-
 
 
 

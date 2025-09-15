@@ -30,7 +30,7 @@ int main(){
 	cout << "Triggered camera"<< endl;
 
 	
-	cout << String(arv_camera_get_device_serial_number(cam,&error))<<endl;
+	cout << String(arv_camera_get_device_serial_number(cam->camera[id],&error))<<endl;
 	
 	
 
