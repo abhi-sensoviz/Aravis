@@ -39,25 +39,25 @@
 #define signals ARV_SIGNALS
 #include <arv.h>
 #undef signals
-typedef ArvCamera Camera_t;
-vector<ArvBuffer*> buffers;vector<ArvStream*> streams;
-Camera_t** camera;
-struct CallBackData{
+
+
+struct Camera_t{
     ArvCamera* cam;
     ArvBuffer* buffer;
     ArvStream* stream;
     string serial;
-    int index;
-};
+    unsigned int index;
+
+}typedef Camera_t;
+Camera_t** camera;
+
 
 class CImageEventPrinter {
 public:
-    static void OnImageGrabbed(ArvStream* , gpointer );
+    static void OnImageGrabbed(ArvStream *stream,gpointer );
     static void convertImage(ArvBuffer*  ,unsigned int , int );
     static int FindPartIDinSyncWithCamImg(int, ArvBuffer*);
 };
-
-
 
 
 
@@ -289,14 +289,13 @@ void ExtTrig:: OnImageGrabbed( string str, int index)
 }
 
 
-
-//same as app
+//Initiallizing all buffers
 int ExtTrig::InitiallizeBuffers(){
 
-    camera = new ArvCamera*[NoOfCamera];
+    camera = new Camera_t*[NoOfCamera];
     for(unsigned int i=0;i<NoOfCamera;i++){
 
-
+        camera[i]=new Camera_t();
         int CamWd_temp=0;
         int CamHt_temp=0;
         bool flag_temp=false;
@@ -353,9 +352,9 @@ bool ExtTrig:: CheckCamConnection( int id)
     if(ImgSourceMode==1){
         try{
             for(j=0;j<NoOfCamera;j++){
-                if(camera[j]){
+                if(camera[j]->cam){
 
-                    string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                    string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                     CHECK_ERROR(error, "Camera "+to_string(j)+" Not Connected");
                     if(img_src[id].cam_sr_no==sr_no) break;
                 }
@@ -364,8 +363,9 @@ bool ExtTrig:: CheckCamConnection( int id)
             if(j<NoOfCamera&&j>=0){
                 //arv_update_device_list();//bottle neck
 
-                arv_camera_get_device_serial_number(camera[j],&error);
+                arv_camera_get_device_serial_number(camera[j]->cam,&error);
                 if(error!=NULL){
+                    g_error_free(error);
                     cerr << "camera not connected"<<endl;
                     cam_sr_no_str[j]="";
                     return false;
@@ -394,13 +394,13 @@ bool ExtTrig:: CheckCamConnection( int id)
 //prepare camera
 int ExtTrig::PrepareCamera(){
     try{
-        cout<<"PREPARE CAMERA"<<endl;
+        //cout<<"PREPARE CAMERA"<<endl;
         arv_update_device_list();// refresh camera list
         //cout << "Prepare camera reached"<<endl;
         GError* error = NULL; //get number of camera
         unsigned int TotalConnectedCameras=arv_get_n_devices();
 
-        NoOfCamera= arv_get_n_devices(); //is configured in s/w comment this out
+        //NoOfCamera= arv_get_n_devices(); //is configured in s/w comment this out
         if(TotalConnectedCameras==0){
             throw runtime_error("No Cameras Found");
         }
@@ -435,6 +435,7 @@ int ExtTrig::PrepareCamera(){
                 cout << "  Model       : " << model << endl;
                 cout << "  Serial      : " << serial<< endl;
                 cout << "-----------------------------" << endl;
+
 
 
                 //opeaning camera
@@ -506,14 +507,14 @@ int ExtTrig::PrepareCamera(){
 
 
                 //pushing camera
-                camera[i]=cam;
+                camera[i]->cam=cam;
                 cout <<"camera opned " << model << endl;
 
 
                 //pushing stream
-                ArvStream* stream = arv_camera_create_stream(cam,NULL,NULL,NULL,&error);
+                ArvStream* stream=arv_camera_create_stream(cam,NULL,NULL,NULL,&error);
+                camera[i]->stream = stream;
                 CHECK_ERROR(error, "Error in creating streamm");
-                streams.push_back(stream);
 
 
                 //get payload size
@@ -522,26 +523,24 @@ int ExtTrig::PrepareCamera(){
 
 
                 //pushing buffer
-                buffers.push_back(arv_buffer_new(payload,NULL));
+                ArvBuffer* buffer=arv_buffer_new(payload,NULL);
+                camera[i]->buffer=buffer;
 
                 arv_camera_start_acquisition(cam,&error);
                 CHECK_ERROR(error, "Failed to start acquisiton");
 
 
 
-                CallBackData *data=new CallBackData();
-                data->buffer=buffers[i];
-                data->cam=camera[i];
-                data->stream=streams[i];
-                data->serial=serial;
-                data->index=i;
+
+                camera[i]->serial=serial;
+                camera[i]->index=i;
 
                 //pushing buffer to stream
-                arv_stream_push_buffer(streams[i],buffers[i]);
+                arv_stream_push_buffer(camera[i]->stream,camera[i]->buffer);
 
 
-                g_signal_connect(streams[i], "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), data);
-                arv_stream_set_emit_signals(streams[i],true);
+                g_signal_connect(camera[i]->stream, "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), camera[i]);
+                arv_stream_set_emit_signals(camera[i]->stream,true);
 
 
 
@@ -568,7 +567,7 @@ int ExtTrig::InitCameraSerialDetails(){
     GError* error=NULL;
     for(unsigned int j=0;j<NoOfCamera;j++)
     {
-        img_src[j].cam_sr_no=arv_camera_get_device_serial_number(camera[j],&error);
+        img_src[j].cam_sr_no=arv_camera_get_device_serial_number(camera[j]->cam,&error);
         CHECK_ERROR(error, "Failed to get gamma");
 
     }
@@ -578,18 +577,21 @@ int ExtTrig::InitCameraSerialDetails(){
 
 //stop camera
 void ExtTrig::StopCamera(){
-    cout << "STOP CAMERA" << endl;
+    //cout << "STOP CAMERA" << endl;
     GError* error = nullptr;
 
     for (unsigned int i = 0; i < NoOfCamera; i++) {
         // Disable signal emission for the stream if it exists
-        if (streams[i]) {
-            arv_stream_set_emit_signals(streams[i], FALSE);
+        if (camera[i] == nullptr) {
+                    continue;
+                }
+        if (camera[i]->stream) {
+            arv_stream_set_emit_signals(camera[i]->stream, FALSE);
         }
 
         // Stop acquisition if camera exists
-        if (camera[i]) {
-            arv_camera_stop_acquisition(camera[i], &error);
+        if (camera[i]->cam) {
+            arv_camera_stop_acquisition(camera[i]->cam, &error);
             if (error) {
                 cerr << "Error stopping acquisition for camera " << i << ": " << error->message << endl;
                 g_error_free(error);
@@ -600,25 +602,24 @@ void ExtTrig::StopCamera(){
         }
 
         // Unreference camera object
-        if (camera[i]) {
-            g_object_unref(camera[i]);
-            camera[i] = nullptr;
+        if (camera[i]->cam) {
+            g_object_unref(camera[i]->cam);
             cout << "Camera " << i << " freed" << endl;
         }
 
         // Unreference buffer object
-        if (buffers[i]) {
-            g_object_unref(buffers[i]);
-            buffers[i] = nullptr;
+        if (camera[i]->buffer) {
+            g_object_unref(camera[i]->buffer);
             cout << "Buffer " << i << " freed" << endl;
         }
 
         // Unreference stream object
-        if (streams[i]) {
-            g_object_unref(streams[i]);
-            streams[i] = nullptr;
+        if (camera[i]->stream) {
+            g_object_unref(camera[i]->stream);
             cout << "Stream " << i << " freed" << endl;
         }
+        delete camera[i];
+        camera[i]=nullptr;
     }
 
     cout << "All resources cleaned up successfully." << endl;
@@ -629,18 +630,18 @@ void ExtTrig::StopCamera(){
 //trigger camera
 void ExtTrig::SoftTrigger(int id){
     GError* error=NULL;
+    //cerr <<"reached softTrigger"<<endl;
 
     for(unsigned int j=0;j<NoOfCamera;j++){
 
         try{
-            if(camera[j]){
+            if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Cant get Serial Number of camera");
 
                 if(String(img_src[id].cam_sr_no)==sr_no){
-
-                    arv_camera_software_trigger(camera[j], &error);
+                    arv_camera_software_trigger(camera[j]->cam, &error);
                     CHECK_ERROR(error, "SoftTrigger Error");
                 }
             }
@@ -656,7 +657,7 @@ void ExtTrig::SoftTrigger(int id){
 int ExtTrig::MapCamerainOrder(){
      for(int i = 0; i < NoOfCamera; i++)
      {
-         if(cam_sr_no_str[i] == "")
+         if(cam_sr_no_str[i] == "")//this is causing the seg fault caused connecting camera after starting qualviz
          {
              return -1;
          }
@@ -720,9 +721,9 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
     try{
         //getting camera index
         for(j=0;j<NoOfCamera;j++){
-            if(camera[j]){
+            if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Error in set Exposure Function ");
                 if(id==sr_no)break;
             }
@@ -734,9 +735,9 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
                 if(exp>26){
                 if(exp>100000)
                             exp=100000;
-                if (arv_camera_is_exposure_time_available (camera[j],&error)){
+                if (arv_camera_is_exposure_time_available (camera[j]->cam,&error)){
 
-                    arv_camera_set_exposure_time(camera[j], exp, &error);
+                    arv_camera_set_exposure_time(camera[j]->cam, exp, &error);
                     CHECK_ERROR(error, "Error in seting exposure time");
 
                 }
@@ -750,7 +751,7 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
                 if(gam>3.99)gam=3.99;
 
                 // Set the gamma value
-                arv_camera_set_float(camera[j], "Gamma", gam, &error);
+                arv_camera_set_float(camera[j]->cam, "Gamma", gam, &error);
                 CHECK_ERROR(error, "Failed to set gamma");
 
             }
@@ -760,19 +761,19 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
                     if(gain>0){
                         double gmin;
                         double gmax;
-                        arv_camera_get_gain_bounds (camera[j], &gmin, &gmax,&error);
+                        arv_camera_get_gain_bounds (camera[j]->cam, &gmin, &gmax,&error);
                         CHECK_ERROR(error, "Failed to get max gain and min gain");
                         double gainRaw=double(gmin+(gmax-gmin)*gain/100);
                         cout << "gain value: "<<gain <<" Rawgain: "<<gainRaw<<endl;
 
 
                         //setting gain to manual mode :? should be in prepare camera function
-                        arv_camera_set_gain_auto(camera[j], arv_auto_from_string("Off"), &error);
+                        arv_camera_set_gain_auto(camera[j]->cam, arv_auto_from_string("Off"), &error);
                         CHECK_ERROR(error, "Failed to set Gain Manual Mode");
 
 
                         //setting gain
-                        arv_camera_set_gain ( camera[j], gainRaw, &error);
+                        arv_camera_set_gain ( camera[j]->cam, gainRaw, &error);
                         CHECK_ERROR(error, "Failed to set Gain");
 
                     }
@@ -796,18 +797,18 @@ double ExtTrig::GetExposure(string id){
     try{
         //getting camera index
         for(j=0;j<NoOfCamera;j++){
-            if(camera[j]){
+            if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Error in get Exposure Function ");
                 if(id==sr_no)break;
             }
         }
 
         //getting exposure
-        if (arv_camera_is_exposure_time_available (camera[j],&error)){
+        if (arv_camera_is_exposure_time_available (camera[j]->cam,&error)){
 
-            double exp=arv_camera_get_exposure_time (camera[j],&error);
+            double exp=arv_camera_get_exposure_time (camera[j]->cam,&error);
             CHECK_ERROR(error, "Error in Getting Exposure Value");
             return exp;
 
@@ -831,9 +832,9 @@ double ExtTrig::GetGamma(string id){
     try{
         //getting camera index
         for(j=0;j<NoOfCamera;j++){
-            if(camera[j]){
+            if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Error in get Exposure Function ");
                 if(id==sr_no)break;
             }
@@ -841,7 +842,7 @@ double ExtTrig::GetGamma(string id){
 
 
             // Get the gamma value
-        double gamma = arv_camera_get_float(camera[j], "Gamma", &error);
+        double gamma = arv_camera_get_float(camera[j]->cam, "Gamma", &error);
         CHECK_ERROR(error, "Failed to get gamma");
         return gamma;
 
@@ -865,9 +866,9 @@ double ExtTrig::GetCameraTickCount(string id){
     try{
         //getting camera index
         for(j=0;j<NoOfCamera;j++){
-            if(camera[j]){
+            if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
+                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Error in get Exposure Function ");
                 if(id==sr_no)break;
             }
@@ -877,7 +878,7 @@ double ExtTrig::GetCameraTickCount(string id){
 
 
         // Retrieve the latched timestamp value
-            int64_t timestamp = arv_buffer_get_timestamp(buffers[j]);
+            int64_t timestamp = arv_buffer_get_timestamp(camera[j]->buffer);
             return timestamp;
         } else {
             cout << "tick count not proer" << endl;
@@ -911,15 +912,15 @@ void ExtTrig::ChangeTriggerToSoftwareType()
                     GError* error=NULL;
                     cout<<"img_src[i].cam_sr_no: "<<img_src[i].cam_sr_no<<" img_src[i].TriggerType: "<<"Software"<<j<<endl;
 
-                    arv_camera_set_string(camera[j], "TriggerMode", "On", &error);
+                    arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
                     CHECK_ERROR(error, "Error in setting camera to Trigger Mode");
 
 
-                    arv_camera_set_string(camera[j], "TriggerSource", "Software", &error);
+                    arv_camera_set_string(camera[j]->cam, "TriggerSource", "Software", &error);
                     CHECK_ERROR(error, "Error in setting TriggerSource software");
 
 
-                    arv_device_set_string_feature_value(arv_camera_get_device(camera[j]), "TriggerActivation", "RisingEdge",&error);
+                    arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge",&error);
                     CHECK_ERROR(error, "Failed to set TriggerActivation");
 
 
@@ -942,7 +943,7 @@ void ExtTrig::ChangeTriggerToSoftwareType()
 
 bool ExtTrig::RefreshCamera()
 {
-    cout <<"REFRESH CAMERA"<<endl;
+    //cout <<"REFRESH CAMERA"<<endl;
 
 
     try
@@ -951,6 +952,25 @@ bool ExtTrig::RefreshCamera()
         {
 
             try {
+                for(int k=0; k<NoOfCamera;k++){
+                    //free resources stream buffer etc if not connected
+                    if(camera[k]->stream)
+                    arv_stream_set_emit_signals(camera[k]->stream, FALSE);
+                    if(camera[k]->cam){
+                        arv_camera_stop_acquisition(camera[k]->cam, NULL);
+                        //CHECK_ERROR(error, "Camera "+to_string(j)+" stop acquation failed");
+                        g_object_unref(camera[k]->cam);
+                        camera[k]->cam = nullptr;
+                    }
+                    if(camera[k]->buffer)
+                    g_object_unref(camera[k]->buffer);
+                    camera[k]->buffer=nullptr;
+                    if(camera[k]->stream)
+                    g_object_unref(camera[k]->stream);
+                    camera[k]->stream=nullptr;
+
+                }
+
 
                 int success=PrepareCamera();
                 if(state == run_mode or state == pause_mode){
@@ -961,6 +981,7 @@ bool ExtTrig::RefreshCamera()
 
                 if(success == 1){
                     for(int k=0; k<NoOfCamera; k++){
+
                         if(k < CamExposure.size() and k<CamGamma.size() and k<CamGain.size()){
                             cout << "refresh camera setting user values for cam " << k  << " : "
                                  << img_src[k].cam_sr_no << " : " << CamExposure[k] << " : "
@@ -1040,19 +1061,19 @@ void ExtTrig::ChangeTriggerType()
 
                     if(img_src[i].TriggerType==1)
                     {   GError* error=NULL;
-                        arv_camera_set_string(camera[j], "TriggerMode", "On", &error);
+                        arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
                         CHECK_ERROR(error, "Error setting TriggerMode");
 
                         // Set Trigger Source to Line1
-                        arv_camera_set_string(camera[j], "TriggerSource", "Line1", &error);
+                        arv_camera_set_string(camera[j]->cam, "TriggerSource", "Line1", &error);
                         CHECK_ERROR(error, "Error setting TriggerSource to Line1");
 
                         // Set Trigger Activation to RisingEdge
-                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]), "TriggerActivation", "RisingEdge", &error);
+                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
                         CHECK_ERROR(error, "Error setting TriggerActivation");
 
                         // Set Line Selector to Line1
-                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]), "LineSelector", "Line1", &error);
+                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
                         CHECK_ERROR(error, "Error setting LineSelector");
                     }
                     else
@@ -1061,15 +1082,15 @@ void ExtTrig::ChangeTriggerType()
                         GError* error=NULL;
                         cout<<"img_src[i].cam_sr_no: "<<img_src[i].cam_sr_no<<" img_src[i].TriggerType: "<<"Software"<<j<<endl;
 
-                        arv_camera_set_string(camera[j], "TriggerMode", "On", &error);
+                        arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
                         CHECK_ERROR(error, "Error in setting camera to Trigger Mode");
 
 
-                        arv_camera_set_string(camera[j], "TriggerSource", "Software", &error);
+                        arv_camera_set_string(camera[j]->cam, "TriggerSource", "Software", &error);
                         CHECK_ERROR(error, "Error in setting TriggerSource software");
 
 
-                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]), "TriggerActivation", "RisingEdge",&error);
+                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge",&error);
                         CHECK_ERROR(error, "Failed to set TriggerActivation");
 
 
@@ -1089,13 +1110,12 @@ void ExtTrig::ChangeTriggerType()
 }
 
 
-
 //callback function On execution of soft trigger function
-void CImageEventPrinter::OnImageGrabbed(ArvStream* stream, gpointer user_data){
+void CImageEventPrinter::OnImageGrabbed(ArvStream *stream,gpointer user_data){
     int gImageCounter=0;
     //cerr << "onImage Grabbed arrived"<<endl;
 
-    CallBackData* data = static_cast<CallBackData*>(user_data);
+    Camera_t* data = static_cast<Camera_t*>(user_data);
     GError* error=NULL;
     //unsigned int j=0;
 
@@ -1114,7 +1134,7 @@ void CImageEventPrinter::OnImageGrabbed(ArvStream* stream, gpointer user_data){
             return;
         }else{
             convertImage(data->buffer,data->index,  gImageCounter);
-            arv_stream_push_buffer(stream,data->buffer);
+            arv_stream_push_buffer(data->stream,data->buffer);
             gImageCounter++;
         }
 
@@ -1426,6 +1446,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
     int         Height;
     int         BufferSize;
     // cv::String  PixelFormat;
+    //cerr<<"caonvert Image"<<endl;
     if(LOG_FLOW==1)
     {
         //            log_doc.LogMsg()<<"convertImage Image Grabbed in camera index : " << index << endl;
