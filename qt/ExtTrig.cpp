@@ -417,9 +417,9 @@ int ExtTrig::PrepareCamera(){
 
         for (unsigned int i = 0; i < TotalConnectedCameras; i++) {
             if(i<NoOfCamera){
-                const char* model = arv_get_device_model(i);
-                const char* serial = arv_get_device_serial_nbr(i);
-                const char* vendor = arv_get_device_vendor(i);
+                const char* model = arv_get_device_model(TotalConnectedCameras -i-1);
+                const char* serial = arv_get_device_serial_nbr(TotalConnectedCameras -i-1);
+                const char* vendor = arv_get_device_vendor(TotalConnectedCameras -i-1);
 
 //				//creating source obj
 //                ImageSource source;
@@ -456,11 +456,6 @@ int ExtTrig::PrepareCamera(){
 
                 arv_device_set_string_feature_value(arv_camera_get_device(cam), "TriggerActivation", "RisingEdge",&error);
                 CHECK_ERROR(error, "Failed to set TriggerActivation");
-
-
-                // arv_device_set_string_feature_value(arv_camera_get_device(cam), "TriggerSelector", "FrameStart",&error);
-                // CHECK_ERROR(error, "Failed to set TriggerSelector");
-
 
 
                 //getting width and height of image
@@ -537,10 +532,11 @@ int ExtTrig::PrepareCamera(){
 
                 //pushing buffer to stream
                 arv_stream_push_buffer(camera[i]->stream,camera[i]->buffer);
+                cerr << serial << i<<endl;
 
-
-                g_signal_connect(camera[i]->stream, "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), camera[i]);
                 arv_stream_set_emit_signals(camera[i]->stream,true);
+                g_signal_connect(camera[i]->stream, "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), camera[i]);
+
 
 
 
@@ -642,6 +638,7 @@ void ExtTrig::SoftTrigger(int id){
 
                 if(String(img_src[id].cam_sr_no)==sr_no){
                     arv_camera_software_trigger(camera[j]->cam, &error);
+
                     CHECK_ERROR(error, "SoftTrigger Error");
                 }
             }
@@ -662,6 +659,7 @@ int ExtTrig::MapCamerainOrder(){
              return -1;
          }
      }
+     cout<<"map camera in order"<<endl;
 
      for(int i = 0; i < NoOfCamera; i++)
      {
@@ -669,6 +667,7 @@ int ExtTrig::MapCamerainOrder(){
          {
              if(cam_sr_no_str[j] == img_src[i].cam_sr_no)
              {
+
                  img_src[i].Width = CamWd[j];
                  img_src[i].Height = CamHt[j];
                  img_src[i].tickFrequency = CamTickFreq[j];
@@ -725,7 +724,10 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
 
                 string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
                 CHECK_ERROR(error, "Error in set Exposure Function ");
-                if(id==sr_no)break;
+                if(id==sr_no){
+                    cerr<<sr_no<<" "<<j<<endl;
+                    break;
+                }
             }
         }
 
@@ -738,6 +740,7 @@ void ExtTrig::SetExposure(double exp,double gam, int gain, string id){
                 if (arv_camera_is_exposure_time_available (camera[j]->cam,&error)){
 
                     arv_camera_set_exposure_time(camera[j]->cam, exp, &error);
+
                     CHECK_ERROR(error, "Error in seting exposure time");
 
                 }
@@ -1134,7 +1137,7 @@ void CImageEventPrinter::OnImageGrabbed(ArvStream *stream,gpointer user_data){
             return;
         }else{
             convertImage(data->buffer,data->index,  gImageCounter);
-            arv_stream_push_buffer(data->stream,data->buffer);
+            arv_stream_push_buffer(stream,data->buffer);
             gImageCounter++;
         }
 

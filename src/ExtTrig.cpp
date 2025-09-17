@@ -194,7 +194,8 @@ int ExtTrig::PrepareCamera(){
 				CHECK_ERROR(error, "Failed CamWd");
 				//CamHt.push_back(max);// chang to 
 				CamHt[i]=max; //after completion of initbuffer fn
-				
+				//arv_camera_set_height()
+				//arv_camera_set_width()
 				//cam_sr_no_str.push_back(serial);
 				//cam_sr_no_str[i]=serial; //change to this after initbuffer fn is complete
 
