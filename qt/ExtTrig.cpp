@@ -43,8 +43,8 @@
 
 struct Camera_t{
     ArvCamera* cam;
-    ArvBuffer* buffer;
     ArvStream* stream;
+    ArvBuffer* buffer;
     string serial;
     unsigned int index;
 
@@ -54,8 +54,8 @@ Camera_t** camera;
 
 class CImageEventPrinter {
 public:
-    static void OnImageGrabbed(ArvStream *stream,gpointer );
-    static void convertImage(ArvBuffer*  ,unsigned int , int );
+    static void OnImageGrabbed(void *user_data, ArvStreamCallbackType type, ArvBuffer *buffer);
+    static void convertImage(unsigned int ,int,ArvStream*,ArvBuffer* );
     static int FindPartIDinSyncWithCamImg(int, ArvBuffer*);
 };
 
@@ -141,7 +141,7 @@ void ExtTrig::convertImage(Mat Img, int index, int count) //(frame_store &frame)
     int         Height;
     int         BufferSize;
 
-
+//    cerr<<"convert image reached"<<endl;
     Width = Img.cols;
     Height=Img.rows;
     unsigned char* pBuffer = Img.data;
@@ -471,8 +471,7 @@ int ExtTrig::PrepareCamera(){
                 //CamHt.push_back(max);// chang to
                 CamHt[i]=max; //after completion of initbuffer fn
 
-                //cam_sr_no_str.push_back(serial);
-                cam_sr_no_str[i]=serial; //change to this after initbuffer fn is complete
+                cam_sr_no_str[i]=serial;
 
 
                 //Turning off auto exposure
@@ -506,9 +505,16 @@ int ExtTrig::PrepareCamera(){
                 cout <<"camera opned " << model << endl;
 
 
-                //pushing stream
-                ArvStream* stream=arv_camera_create_stream(cam,NULL,NULL,NULL,&error);
-                camera[i]->stream = stream;
+                //creting stream
+                ArvStream* stream = arv_camera_create_stream(
+                    cam,                      // camera
+                    CImageEventPrinter::OnImageGrabbed, // callback function pointer
+                    camera[i],                       // user_data (passed to callback)
+                    NULL,                             // user_data destroy
+                    &error                            // error
+                );
+                camera[i]->stream=stream;
+
                 CHECK_ERROR(error, "Error in creating streamm");
 
 
@@ -516,10 +522,12 @@ int ExtTrig::PrepareCamera(){
                 guint payload = arv_camera_get_payload(cam, &error);
                 CHECK_ERROR(error, "Error in getting payload size");
 
+                //psuhing buffer
+                for (int j = 0; j < 50; j++) {
+                    ArvBuffer *buffer = arv_buffer_new(payload, NULL);
+                    arv_stream_push_buffer(stream, buffer);
+                }
 
-                //pushing buffer
-                ArvBuffer* buffer=arv_buffer_new(payload,NULL);
-                camera[i]->buffer=buffer;
 
                 arv_camera_start_acquisition(cam,&error);
                 CHECK_ERROR(error, "Failed to start acquisiton");
@@ -528,19 +536,8 @@ int ExtTrig::PrepareCamera(){
 
 
                 camera[i]->serial=serial;
-                camera[i]->index=i;
-
-                //pushing buffer to stream
-                arv_stream_push_buffer(camera[i]->stream,camera[i]->buffer);
                 cerr << serial << i<<endl;
-
-                arv_stream_set_emit_signals(camera[i]->stream,true);
-                g_signal_connect(camera[i]->stream, "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), camera[i]);
-
-
-
-
-
+//                arv_stream_set_emit_signals(camera[i]->stream,true);
 
 
             }
@@ -633,13 +630,14 @@ void ExtTrig::SoftTrigger(int id){
         try{
             if(camera[j]->cam){
 
-                string sr_no=String(arv_camera_get_device_serial_number(camera[j]->cam,&error));
+                string sr_no=camera[j]->serial;
                 CHECK_ERROR(error, "Cant get Serial Number of camera");
 
                 if(String(img_src[id].cam_sr_no)==sr_no){
                     arv_camera_software_trigger(camera[j]->cam, &error);
-
                     CHECK_ERROR(error, "SoftTrigger Error");
+//                    cerr<< img_src[camera[j]->index].cam_sr_no <<" "<<camera[j]->serial<<endl;
+
                 }
             }
         }
@@ -667,7 +665,7 @@ int ExtTrig::MapCamerainOrder(){
          {
              if(cam_sr_no_str[j] == img_src[i].cam_sr_no)
              {
-
+                 camera[j]->index=i;
                  img_src[i].Width = CamWd[j];
                  img_src[i].Height = CamHt[j];
                  img_src[i].tickFrequency = CamTickFreq[j];
@@ -1064,20 +1062,49 @@ void ExtTrig::ChangeTriggerType()
 
                     if(img_src[i].TriggerType==1)
                     {   GError* error=NULL;
-                        arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
-                        CHECK_ERROR(error, "Error setting TriggerMode");
+                        cout<<"Hard Trigger"<<endl;
 
-                        // Set Trigger Source to Line1
-                        arv_camera_set_string(camera[j]->cam, "TriggerSource", "Line1", &error);
-                        CHECK_ERROR(error, "Error setting TriggerSource to Line1");
+                        if(camera[j]->serial=="02D96448429"){
+                            arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
+                            CHECK_ERROR(error, "Error setting TriggerMode");
 
-                        // Set Trigger Activation to RisingEdge
-                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
-                        CHECK_ERROR(error, "Error setting TriggerActivation");
+                            // Select trigger type = FrameBurstStart
+                            arv_camera_set_string (camera[j]->cam, "TriggerSelector", "FrameBurstStart", &error);
+                            CHECK_ERROR(error, "Error setting TriggerSelector to FrameBurstStart");
 
-                        // Set Line Selector to Line1
-                        arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
-                        CHECK_ERROR(error, "Error setting LineSelector");
+                            // Set trigger source = Line0
+                            arv_camera_set_string (camera[j]->cam, "TriggerSource", "Line0", &error);
+                            CHECK_ERROR(error, "Error setting TriggerSource to Line0");
+
+                            // Set number of frames per trigger = 1
+                            arv_camera_set_integer (camera[j]->cam, "AcquisitionBurstFrameCount", 1, &error);
+                            CHECK_ERROR(error, "Error setting AcquisitionBurstFrameCount to 1");
+
+
+                            // Set Trigger Activation to RisingEdge
+                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
+                            CHECK_ERROR(error, "Error setting TriggerActivation");
+
+//                            // Set Line Selector to Line1
+//                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
+//                            CHECK_ERROR(error, "Error setting LineSelector");
+                        }else{
+                            cout<<"Soft Trigger"<<endl;
+                            arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
+                            CHECK_ERROR(error, "Error setting TriggerMode");
+
+                            // Set Trigger Source to Line1 // line0 for hikvision
+                            arv_camera_set_string(camera[j]->cam, "TriggerSource", "Line1", &error);
+                            CHECK_ERROR(error, "Error setting TriggerSource to Line1");
+
+                            // Set Trigger Activation to RisingEdge
+                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
+                            CHECK_ERROR(error, "Error setting TriggerActivation");
+
+//                            // Set Line Selector to Line1
+//                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
+//                            CHECK_ERROR(error, "Error setting LineSelector");
+                        }
                     }
                     else
                     {
@@ -1114,31 +1141,28 @@ void ExtTrig::ChangeTriggerType()
 
 
 //callback function On execution of soft trigger function
-void CImageEventPrinter::OnImageGrabbed(ArvStream *stream,gpointer user_data){
-    int gImageCounter=0;
-    //cerr << "onImage Grabbed arrived"<<endl;
+void CImageEventPrinter::OnImageGrabbed(void *user_data, ArvStreamCallbackType type, ArvBuffer *buffer){
+//    cerr << "onImage Grabbed arrived"<<endl;
 
     Camera_t* data = static_cast<Camera_t*>(user_data);
-    GError* error=NULL;
+    data->buffer=buffer;
     //unsigned int j=0;
-
     try{
         // // //getting camera index
         // for(j=0;j<NoOfCamera;j++){
-        // 	if(data->cam){    			//	__________________________-> cant read during trigger mode
+        // 	if(data->cam){    			//
 
         // 		string sr_no=String(arv_camera_get_device_serial_number(data->cam,&error));
         // 		CHECK_ERROR(error, "Error in callback function (cannot get serial no:)");
         // 		if((*(data->img_src))[j].cam_sr_no==sr_no)break;//change img_src later
         // 	}
         // }
-        if (data->buffer==NULL || arv_buffer_get_status(data->buffer) != ARV_BUFFER_STATUS_SUCCESS) {
-            cerr << "Failed to get image from camera" << endl;
-            return;
-        }else{
-            convertImage(data->buffer,data->index,  gImageCounter);
-            arv_stream_push_buffer(stream,data->buffer);
-            gImageCounter++;
+        if (type == ARV_STREAM_CALLBACK_TYPE_BUFFER_DONE) {
+                // Check if the buffer is valid
+                if (arv_buffer_get_status(buffer) == ARV_BUFFER_STATUS_SUCCESS) {
+                convertImage(data->index, gImageCounter,data->stream,buffer);
+                gImageCounter++;
+            }
         }
 
     }
@@ -1294,6 +1318,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
 
 
                     }
+                    //check
                     if( time_offset>0&&timelapse<max_timelapse && !s_rec[i].cam_retrieved[j]&&leastTimeLapse>timelapse)
                     {
 
@@ -1442,8 +1467,8 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
  * \param count var to count images
  */
 
- void CImageEventPrinter::convertImage(ArvBuffer* buffer,unsigned int index, int gImageCounter){
-
+ void CImageEventPrinter::convertImage(unsigned int index, int gImageCounter,ArvStream *stream,ArvBuffer* buffer){
+//    cout<<"reached"<<endl;
     int    		x,y;
     int         Width;
     int         Height;
@@ -1452,13 +1477,24 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
     //cerr<<"caonvert Image"<<endl;
     if(LOG_FLOW==1)
     {
-        //            log_doc.LogMsg()<<"convertImage Image Grabbed in camera index : " << index << endl;
+            log_doc.LogMsg()<<"convertImage Image Grabbed in camera index : " << index << endl;
     }
     //        qDebug()<<"convertImage Image Grabbed in camera index : " << index << endl;
+    //changes
+
+    if (buffer==nullptr || arv_buffer_get_status(buffer) != ARV_BUFFER_STATUS_SUCCESS) {
+                cerr << "Failed to get image from camera" << endl;
+                return;
+     }
     arv_buffer_get_image_region(buffer, &x, &y, &Width, &Height);
+    BufferSize= Width*Height*1;
 
     const void* pBuffer = arv_buffer_get_data(buffer, NULL);
-    BufferSize= Width*Height*1;
+
+//    ArvBuffer* newBuffer = arv_buffer_new(BufferSize, NULL);
+    arv_stream_push_buffer(stream, buffer);
+//    cout<<"buffer pushed back"<<endl;
+
 
     int base_cam_index=0;
     if(state==run_mode||state==Trigger_Setting_Mode)
@@ -1478,7 +1514,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
         nCamImgRecieved[index]++;
         qDebug()<<"Cam-"<<index<<"-Image Received Count- "<<nCamImgRecieved[index]<< "-Width: " << Width << "Height" << Height <<"Index:"<<index<<" "<<QTime::currentTime()<<endl;
         //24012025
-        usleep(20000);
+        usleep(30000);
         if(QDEBUG_LOG_FLOW==1)
         {
             qDebug()<<"Cam-"<<index<<"-Image Received Count- "<<nCamImgRecieved[index]<< "-Width: " << Width << "Height" << Height <<"Index:"<<index<<endl;
@@ -1538,8 +1574,16 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
                         log_doc.LogMsg()<<"Cam-"<<index<<"-Image Assigned for PartID-"<<s_rec[id].id << " : " << id <<endl;
                     }
                     //str_str[j]=double((5*str_str[j]+s_rec[id].timer.msecsTo(str1))/6);
-                    //std::copy( pBuffer, pBuffer+BufferSize, s_rec[new_id].fr_Cam[j].buff );
-                    std::copy( static_cast<const uint8_t*>(pBuffer), static_cast<const uint8_t*>(pBuffer) + BufferSize, static_cast<uint8_t*>(s_rec[new_id].fr_Cam[j].buff) );
+//                    //std::copy( pBuffer, pBuffer+BufferSize, s_rec[new_id].fr_Cam[j].buff );
+//                    std::copy( static_cast<const uint8_t*>(pBuffer), static_cast<const uint8_t*>(pBuffer) + BufferSize, static_cast<uint8_t*>(s_rec[new_id].fr_Cam[j].buff) );
+
+                    std::memcpy(s_rec[new_id].fr_Cam[j].buff,pBuffer, BufferSize );
+                    //std::copy( pBuffer, pBuffer+BufferSize, fr[j].buff );
+    //				Mat tempImg=Mat(Height,Width,CV_8UC1);
+    //				tempImg.data=pBuffer;
+//                    cv::Mat tempImg(Height, Width, CV_8UC1, const_cast<void*>(pBuffer));
+
+
                     s_rec[new_id].cam_retrieved[j]=true;
                     s_rec[new_id].trigged=true;
                 }
@@ -1585,7 +1629,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
 
         }
 
-
+    cout<<"run mode if condition exited"<<endl;
     }
     else if(state==Trigger_Setting_Mode)
     {
@@ -1668,6 +1712,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
 
                 fr[j].Active=true;
                 fr[j].CameraIndex=j;
+
                 if(m_ConvertImage[j].cols!=img_src[j].Width)
                 {
                     m_ConvertImage[j]=cv::Mat(Height,Width,CV_8UC1);
