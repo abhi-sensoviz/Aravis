@@ -56,7 +56,7 @@ class CImageEventPrinter {
 public:
     static void OnImageGrabbed(void *user_data, ArvStreamCallbackType type, ArvBuffer *buffer);
     static void convertImage(unsigned int ,int,ArvStream*,ArvBuffer* );
-    static int FindPartIDinSyncWithCamImg(int, ArvBuffer*);
+    static int FindPartIDinSyncWithCamImg(int, double);
 };
 
 
@@ -467,7 +467,7 @@ int ExtTrig::PrepareCamera(){
                 CHECK_ERROR(error, "Failed CamWd");
 
                 arv_camera_get_height_bounds ( cam, &min, &max,&error );
-                CHECK_ERROR(error, "Failed CamWd");
+                CHECK_ERROR(error, "Failed Camht");
                 //CamHt.push_back(max);// chang to
                 CamHt[i]=max; //after completion of initbuffer fn
 
@@ -879,7 +879,7 @@ double ExtTrig::GetCameraTickCount(string id){
 
 
         // Retrieve the latched timestamp value
-            int64_t timestamp = arv_buffer_get_timestamp(camera[j]->buffer);
+            int64_t timestamp = arv_buffer_get_timestamp(camera[j]->buffer);//need to get trigger time
             return timestamp;
         } else {
             cout << "tick count not proer" << endl;
@@ -1064,47 +1064,21 @@ void ExtTrig::ChangeTriggerType()
                     {   GError* error=NULL;
                         cout<<"Hard Trigger"<<endl;
 
-                        if(camera[j]->serial=="02D96448429"){
                             arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
                             CHECK_ERROR(error, "Error setting TriggerMode");
 
-                            // Select trigger type = FrameBurstStart
-                            arv_camera_set_string (camera[j]->cam, "TriggerSelector", "FrameBurstStart", &error);
-                            CHECK_ERROR(error, "Error setting TriggerSelector to FrameBurstStart");
+                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge",&error);
+                            CHECK_ERROR(error, "Failed to set TriggerActivation");
 
-                            // Set trigger source = Line0
-                            arv_camera_set_string (camera[j]->cam, "TriggerSource", "Line0", &error);
-                            CHECK_ERROR(error, "Error setting TriggerSource to Line0");
-
-                            // Set number of frames per trigger = 1
-                            arv_camera_set_integer (camera[j]->cam, "AcquisitionBurstFrameCount", 1, &error);
-                            CHECK_ERROR(error, "Error setting AcquisitionBurstFrameCount to 1");
-
-
-                            // Set Trigger Activation to RisingEdge
-                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
-                            CHECK_ERROR(error, "Error setting TriggerActivation");
-
-//                            // Set Line Selector to Line1
-//                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
-//                            CHECK_ERROR(error, "Error setting LineSelector");
-                        }else{
-                            cout<<"Soft Trigger"<<endl;
-                            arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
-                            CHECK_ERROR(error, "Error setting TriggerMode");
 
                             // Set Trigger Source to Line1 // line0 for hikvision
-                            arv_camera_set_string(camera[j]->cam, "TriggerSource", "Line1", &error);
+                            arv_camera_set_string(camera[j]->cam, "TriggerSource", "Line0", &error);
                             CHECK_ERROR(error, "Error setting TriggerSource to Line1");
 
                             // Set Trigger Activation to RisingEdge
                             arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "TriggerActivation", "RisingEdge", &error);
                             CHECK_ERROR(error, "Error setting TriggerActivation");
 
-//                            // Set Line Selector to Line1
-//                            arv_device_set_string_feature_value(arv_camera_get_device(camera[j]->cam), "LineSelector", "Line1", &error);
-//                            CHECK_ERROR(error, "Error setting LineSelector");
-                        }
                     }
                     else
                     {
@@ -1142,7 +1116,6 @@ void ExtTrig::ChangeTriggerType()
 
 //callback function On execution of soft trigger function
 void CImageEventPrinter::OnImageGrabbed(void *user_data, ArvStreamCallbackType type, ArvBuffer *buffer){
-//    cerr << "onImage Grabbed arrived"<<endl;
 
     Camera_t* data = static_cast<Camera_t*>(user_data);
     data->buffer=buffer;
@@ -1160,6 +1133,7 @@ void CImageEventPrinter::OnImageGrabbed(void *user_data, ArvStreamCallbackType t
         if (type == ARV_STREAM_CALLBACK_TYPE_BUFFER_DONE) {
                 // Check if the buffer is valid
                 if (arv_buffer_get_status(buffer) == ARV_BUFFER_STATUS_SUCCESS) {
+
                 convertImage(data->index, gImageCounter,data->stream,buffer);
                 gImageCounter++;
             }
@@ -1174,7 +1148,7 @@ void CImageEventPrinter::OnImageGrabbed(void *user_data, ArvStreamCallbackType t
 }
 
 
-int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
+int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, double arv_timestamp)
 {
 
     string text1 = "fFindPartIDinSyncWithCamImg str_str6 : ";
@@ -1243,10 +1217,12 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
                     {
                         double tick_diff = -1;
                         if(s_rec[i].cam_trigg_tickcount[j]>=0){
-                            tick_diff = double(arv_buffer_get_timestamp(buffer)) -
+                            tick_diff = arv_timestamp-//double(arv_buffer_get_timestamp(buffer)) -
                                     s_rec[i].cam_trigg_tickcount[j];
                         }
-                        double tick_diff_ms = (tick_diff*1000)/(img_src[j].tickFrequency);
+//                        double tick_diff_ms = (tick_diff*1000)/(img_src[j].tickFrequency);
+//                        time_offset = tick_diff_ms;
+                        double tick_diff_ms = tick_diff / 1e6;
                         time_offset = tick_diff_ms;
                         if(CameraTriggerInEncoder){
                             int pulse_speed_present = (camTimerData[j].ratio+timer_val[j])*1000/(time_offset*rpm);
@@ -1259,7 +1235,8 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
                             log_doc.LogMsg() << "tC at trigger : " <<
                                                 s_rec[i].cam_trigg_tickcount[j]
                                                 << " : tC frame :  " <<
-                                                   arv_buffer_get_timestamp(buffer)
+//                                                   arv_buffer_get_timestamp(buffer)
+                                                   arv_timestamp
                                                 << " : tick diff : " << tick_diff
                                                 << " : tick_diff_ms : " << tick_diff_ms;
                         }
@@ -1319,7 +1296,12 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
 
                     }
                     //check
-                    if(true|| time_offset>0&&timelapse<max_timelapse && !s_rec[i].cam_retrieved[j]&&leastTimeLapse>timelapse)
+                    cerr<<"index: "<<j<<" time_ofset: "<<time_offset <<"\n"<<
+                          " timelapse: "<<timelapse <<"\n"<<
+                          " max_timelapse: "<<max_timelapse <<"\n"<<
+                          "leastTimeLapse: "<<leastTimeLapse <<"\n"<<
+                          "s_rec.camretrieved: "<< s_rec[i].cam_retrieved[j]<<"\n"<<endl;
+                    if(time_offset>0&&timelapse<max_timelapse && !s_rec[i].cam_retrieved[j]&&leastTimeLapse>timelapse)
                     {
 
                         id=i;
@@ -1474,7 +1456,8 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
     int         Height;
     int         BufferSize;
     // cv::String  PixelFormat;
-    //cerr<<"caonvert Image"<<endl;
+    cerr<<"convert Image"<<endl;
+
     if(LOG_FLOW==1)
     {
             log_doc.LogMsg()<<"convertImage Image Grabbed in camera index : " << index << endl;
@@ -1488,33 +1471,37 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
      }
     arv_buffer_get_image_region(buffer, &x, &y, &Width, &Height);
     BufferSize= Width*Height*1;
+    double arv_timestamp=double(arv_buffer_get_timestamp(buffer));
+
 
     const void* pBuffer = arv_buffer_get_data(buffer, NULL);
 
-//    ArvBuffer* newBuffer = arv_buffer_new(BufferSize, NULL);
+//   ArvBuffer* newBuffer = arv_buffer_new(BufferSize, NULL);
+
     arv_stream_push_buffer(stream, buffer);
-//    cout<<"buffer pushed back"<<endl;
+//   cout<<"buffer pushed back"<<endl;
 
-
-    int base_cam_index=0;
-    if(state==run_mode||state==Trigger_Setting_Mode)
-    {
-        for(int k=0;k<NoOfCamera;k++)
+    QtConcurrent::run([=]() {
+        static QMutex global_mutex;
+        QMutexLocker locker(&global_mutex);
+        int base_cam_index=0;
+        if(state==run_mode||state==Trigger_Setting_Mode)
         {
-            if(cam_active[k]&&img_src[k].TriggerType==1&&PartArrivalInfoSource==1)
+            for(int k=0;k<NoOfCamera;k++)
             {
-                base_cam_index=k;
-                break;
+                if(cam_active[k]&&img_src[k].TriggerType==1&&PartArrivalInfoSource==1)
+                {
+                    base_cam_index=k;
+                    break;
+                }
             }
         }
-    }
-
-    if(state==run_mode)
-    {
+        if(state==run_mode){
+        usleep(20000);
         nCamImgRecieved[index]++;
         qDebug()<<"Cam-"<<index<<"-Image Received Count- "<<nCamImgRecieved[index]<< "-Width: " << Width << "Height" << Height <<"Index:"<<index<<" "<<QTime::currentTime()<<endl;
         //24012025
-//        usleep(30000);
+//        usleep(20000);
         if(QDEBUG_LOG_FLOW==1)
         {
             qDebug()<<"Cam-"<<index<<"-Image Received Count- "<<nCamImgRecieved[index]<< "-Width: " << Width << "Height" << Height <<"Index:"<<index<<endl;
@@ -1543,12 +1530,12 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
                     }
                     else
                     {
-                        id=FindPartIDinSyncWithCamImg(j, buffer);
+                        id=FindPartIDinSyncWithCamImg(j, arv_timestamp);
                     }
                 }
                 else
                 {
-                    id=FindPartIDinSyncWithCamImg(j, buffer);
+                    id=FindPartIDinSyncWithCamImg(j, arv_timestamp);
                 }
                 if(LOG_FLOW==1)
                 {
@@ -1629,9 +1616,9 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
 
         }
 
-    cout<<"run mode if condition exited"<<endl;
+
     }
-    else if(state==Trigger_Setting_Mode)
+        else if(state==Trigger_Setting_Mode)
     {
         for(int j=0;j<NoOfCamera;j++)
         {
@@ -1762,7 +1749,7 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
             }
         }
     }
-    else
+        else
     {
         for(int j=0;j<NoOfCamera;j++)
         {
@@ -1783,16 +1770,14 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, ArvBuffer* buffer)
             }
         }
     }
+    });
+//    QMutex global_mutex;
 
+//    {
+//        QMutexLocker locker(&global_mutex);
+//    }
 
-
-
-
-
-
-
-
- }
+}
 
 
 
