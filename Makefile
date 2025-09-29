@@ -1,31 +1,26 @@
-cc=g++
+cc = g++
 
-flags= -Wall -O2 -I./header $(shell pkg-config --cflags opencv4 aravis-0.10)
+# Compiler flags
+flags = -Wall -O2 -I./header $(shell pkg-config --cflags opencv4 aravis-0.10)
 
-libs = $(shell pkg-config --libs opencv4 aravis-0.10)
+# Libraries (pkg-config + explicit libusb)
+libs = $(shell pkg-config --libs opencv4 aravis-0.10) -lusb-1.0
 
-Source = src/ExtTrig.cpp 
-Header = header/ExtTrig.h 
+# Source and header files
+Source = src/ExtTrig.cpp
+Header = header/ExtTrig.h
+Main = cam.cpp
+Target = cam
 
-Main= cam.cpp
-Target= cam
-
-
+# Default target
 all: $(Target)
 
-$(Target) : $(Source) $(Main)
-	$(cc) $(flags)  $(Source) $(Main) -o $(Target) $(libs)
+# Build target
+$(Target): $(Source) $(Main)
+	$(cc) $(flags) $(Source) $(Main) -o $(Target) $(libs)
 
-
+# Clean
 clean:
-	rm $(Target) *.png
-	
-
+	rm -f $(Target) *.png
 
 .PHONY: clean all
-
-
-
-
-
-

@@ -3,7 +3,7 @@
 
 
 int main(){
-	int id=0;
+	int id=1;
 	GError* error=NULL;
 	ExtTrig* cam=new ExtTrig();	
 	cam->InitiallizeBuffers();

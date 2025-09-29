@@ -162,7 +162,13 @@ int ExtTrig::PrepareCamera(){
 				ArvCamera* cam=arv_camera_new(camera_id.c_str(),&error);
 				CHECK_ERROR(error, "Failed to open camera");
 				
-			
+		
+				     arv_camera_set_pixel_format (
+                  cam,
+                  ARV_PIXEL_FORMAT_YUV_422_PACKED,
+                  NULL
+                );
+
 				//setting camera to trigger mode of camera
 			
 				arv_camera_set_string(cam, "TriggerMode", "On", &error);
