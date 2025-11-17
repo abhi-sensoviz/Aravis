@@ -446,12 +446,28 @@ int ExtTrig::PrepareCamera(){
 
                 //setting camera to trigger mode of camera
 
+//                arv_camera_set_string(cam, "TriggerSelector", "FrameStart", &error);
+//                arv_camera_set_string(cam, "TriggerMode", "On", &error);
+//                CHECK_ERROR(error, "Error in setting camera to Trigger Mode");
+
+
+//                arv_camera_set_string(cam, "TriggerSource", "Software", &error);
+//                CHECK_ERROR(error, "Error in setting TriggerSource software");
+
+                // Enable trigger mode
+
+
                 arv_camera_set_string(cam, "TriggerMode", "On", &error);
-                CHECK_ERROR(error, "Error in setting camera to Trigger Mode");
+                CHECK_ERROR(error, "Error setting TriggerMode");
 
-
+                // Set software trigger as source
                 arv_camera_set_string(cam, "TriggerSource", "Software", &error);
-                CHECK_ERROR(error, "Error in setting TriggerSource software");
+                CHECK_ERROR(error, "Error setting TriggerSource");
+
+                // VERY IMPORTANT for MindVision: Stop free-run
+                arv_camera_set_string(cam, "AcquisitionMode", "Continuous", &error);
+                CHECK_ERROR(error, "Error setting AcquisitionMode");
+
 
 
                 arv_device_set_string_feature_value(arv_camera_get_device(cam), "TriggerActivation", "RisingEdge",&error);
@@ -474,7 +490,7 @@ int ExtTrig::PrepareCamera(){
                 cam_sr_no_str[i]=serial;
 
 
-                //Turning off auto exposure
+////                //Turning off auto exposure
                 arv_camera_set_exposure_mode (cam, arv_exposure_mode_from_string("Timed"), &error);
                 CHECK_ERROR(error, "Error in setting exposure mode");
 
@@ -500,14 +516,17 @@ int ExtTrig::PrepareCamera(){
 
 
 
+
+
+
                 //pushing camera
                 camera[i]->cam=cam;
                 cout <<"camera opned " << model << endl;
 
-                //COLOR CONVERSION
+//                COLOR CONVERSION
                 arv_camera_set_pixel_format (
                   cam,
-                  ARV_PIXEL_FORMAT_MONO_8,
+                  ARV_PIXEL_FORMAT_BAYER_RG_8, //ARV_PIXEL_FORMAT_MONO_8,
                   NULL
                 );  //setting pixel format configurable
 
@@ -517,7 +536,6 @@ int ExtTrig::PrepareCamera(){
                     cam,                      // camera
                     CImageEventPrinter::OnImageGrabbed, // callback function pointer
                     camera[i],                       // user_data (passed to callback)
-                    NULL,                             // user_data destroy
                     &error                            // error
                 );
                 camera[i]->stream=stream;
@@ -529,7 +547,7 @@ int ExtTrig::PrepareCamera(){
                 CHECK_ERROR(error, "Error in getting payload size");
 
                 //psuhing buffer
-                for (int j = 0; j < 1; j++) {
+                for (int j = 0; j < 5; j++) {
                     ArvBuffer *buffer = arv_buffer_new(payload, NULL);
                     arv_stream_push_buffer(stream, buffer);
                 }
@@ -542,7 +560,7 @@ int ExtTrig::PrepareCamera(){
 
 
                 camera[i]->serial=serial;
-               arv_stream_set_emit_signals(camera[i]->stream,true);
+                arv_stream_set_emit_signals(camera[i]->stream,true);
 
 
             }
@@ -1068,6 +1086,8 @@ void ExtTrig::ChangeTriggerType()
                     if(img_src[i].TriggerType==1)
                     {   GError* error=NULL;
                         cout<<"Hard Trigger"<<endl;
+//                        return ;
+
 
                             arv_camera_set_string(camera[j]->cam, "TriggerMode", "On", &error);
                             CHECK_ERROR(error, "Error setting TriggerMode");
@@ -1144,6 +1164,7 @@ void CImageEventPrinter::OnImageGrabbed(void *user_data, ArvStreamCallbackType t
         if (type == ARV_STREAM_CALLBACK_TYPE_BUFFER_DONE) {
                 // Check if the buffer is valid
                 if (arv_buffer_get_status(buffer) == ARV_BUFFER_STATUS_SUCCESS) {
+
 
                 convertImage(data->index, gImageCounter,data->stream,buffer);
                 gImageCounter++;
@@ -1459,15 +1480,6 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, double arv_timestamp)
 
 
 
-
-
-
-
-
-
-
-
-
 /*!
  * \brief convertImage This Function is for online Mode. This function read and store the image in appropriate buffer
  * \param ptrGrabResult pointer to Image Grab Container
@@ -1507,10 +1519,18 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, double arv_timestamp)
     arv_stream_push_buffer(stream, buffer);
 //   cout<<"buffer pushed back"<<endl;
 
+
+
+
+
     QtConcurrent::run([=]() {
         static QMutex global_mutex;
         QMutexLocker locker(&global_mutex);
         int base_cam_index=0;
+
+
+
+
         if(state==run_mode||state==Trigger_Setting_Mode)
         {
             for(int k=0;k<NoOfCamera;k++)
@@ -1786,12 +1806,24 @@ int CImageEventPrinter::FindPartIDinSyncWithCamImg(int j, double arv_timestamp)
                 fr[j].CameraIndex=j;
                 if(m_ConvertImage[j].cols!=img_src[j].Width)
                 {
-                    m_ConvertImage[j]=cv::Mat(Height,Width,CV_8UC1);
+                    m_ConvertImage[j]=cv::Mat();
 
                 }
 
-                std::memcpy(m_ConvertImage[j].data,pBuffer, BufferSize );
+                cv::Mat bayer(Height, Width, CV_8UC1, const_cast<void*>(pBuffer));
+
+                // Step 3: Convert BayerRG8 -> Grayscale directly into m_ConvertImage[j]
+                cv::cvtColor(bayer, m_ConvertImage[j], cv::COLOR_BayerRG2GRAY);
+
+
+//                std::memcpy(m_ConvertImage[j].data,pBuffer, BufferSize );
+
+
                 //std::copy( pBuffer, pBuffer+BufferSize, fr[j].buff );
+//                cv::imshow("Image", m_ConvertImage[j]);
+//                cv::waitKey(1);
+
+
 
             }
         }

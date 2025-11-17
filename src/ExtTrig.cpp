@@ -163,11 +163,11 @@ int ExtTrig::PrepareCamera(){
 				CHECK_ERROR(error, "Failed to open camera");
 				
 		
-				     arv_camera_set_pixel_format (
-                  cam,
-                  ARV_PIXEL_FORMAT_YUV_422_PACKED,
-                  NULL
-                );
+				//      arv_camera_set_pixel_format (
+                //   cam,
+                //   ARV_PIXEL_FORMAT_YUV_422_PACKED,
+                //   NULL
+                // );
 
 				//setting camera to trigger mode of camera
 			
@@ -183,10 +183,10 @@ int ExtTrig::PrepareCamera(){
 				CHECK_ERROR(error, "Failed to set TriggerActivation");
 			
 		
-				// arv_device_set_string_feature_value(arv_camera_get_device(cam), "TriggerSelector", "FrameStart",&error);
-				// CHECK_ERROR(error, "Failed to set TriggerSelector");
+				arv_device_set_string_feature_value(arv_camera_get_device(cam), "TriggerSelector", "FrameStart",&error);
+				CHECK_ERROR(error, "Failed to set TriggerSelector");
 				
-
+        		// arv_camera_set_trigger(cam, "Software",NULL);
 
 				//getting width and height of image
 				gint min,max;
@@ -198,14 +198,8 @@ int ExtTrig::PrepareCamera(){
 			
 				arv_camera_get_height_bounds ( cam, &min, &max,&error );
 				CHECK_ERROR(error, "Failed CamWd");
-				//CamHt.push_back(max);// chang to 
 				CamHt[i]=max; //after completion of initbuffer fn
-				//arv_camera_set_height()
-				//arv_camera_set_width()
-				//cam_sr_no_str.push_back(serial);
-				//cam_sr_no_str[i]=serial; //change to this after initbuffer fn is complete
-
-
+			
 				//Turning off auto exposure		
 				arv_camera_set_exposure_mode (cam, arv_exposure_mode_from_string("Timed"), &error);
 				CHECK_ERROR(error, "Error in setting exposure mode");
@@ -221,7 +215,6 @@ int ExtTrig::PrepareCamera(){
 				CHECK_ERROR(error, "Failed to Enable Gamma");
 
 
-			
 
 				//setting gamma and exposure
 				arv_camera_set_exposure_time(cam, 400, &error);
@@ -238,7 +231,7 @@ int ExtTrig::PrepareCamera(){
 				
 
 				//pushing stream 
-				ArvStream* stream = arv_camera_create_stream(cam,NULL,NULL,NULL,&error);
+				ArvStream* stream = arv_camera_create_stream(cam,NULL,NULL,&error);
 				CHECK_ERROR(error, "Error in creating streamm");
 				streams.push_back(stream);
 				
@@ -251,24 +244,68 @@ int ExtTrig::PrepareCamera(){
 				//pushing buffer
 				buffers.push_back(arv_buffer_new(payload,NULL));
 
-				arv_camera_start_acquisition(cam,&error);		
-				CHECK_ERROR(error, "Failed to start acquisiton");
-
-
-
-				CallBackData *data=new CallBackData();
-				data->buffer=buffers[i];
-				data->cam=camera[i];
-				data->stream=streams[i];
-				data->img_src=&img_src;
-				data->index=i;
+		
 
 				//pushing buffer to stream
 				arv_stream_push_buffer(streams[i],buffers[i]); 
 
 
-				g_signal_connect(streams[i], "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), data);
-				arv_stream_set_emit_signals(streams[i],true);
+        
+
+			// arv_camera_start_acquisition(cam, &error);
+			
+			// arv_camera_software_trigger(cam,NULL);
+
+			// printf("Capturing...\n");
+			// ArvBuffer *buffer_ = arv_stream_timeout_pop_buffer(stream, 200000);
+
+			// if (!buffer_ || arv_buffer_get_status(buffer_) != ARV_BUFFER_STATUS_SUCCESS) {
+			// 	printf("Failed to get buffer\n");
+			// 	return -1;
+			// }
+
+			// size_t size;
+			// const guint8 *data = static_cast<const guint8*>(arv_buffer_get_data(buffer_, &size));
+
+			// int width, height;
+			// arv_camera_get_region(cam, NULL, NULL, &width, &height, NULL);
+
+			// printf("Saving PGM: %dx%d\n", width, height);
+
+			// FILE *f = fopen("image.pgm", "wb");
+			// fprintf(f, "P5\n%d %d\n255\n", width, height);
+			// fwrite(data, 1, width * height, f);
+			// fclose(f);
+
+			// printf("Saved image.pgm\n");
+
+			// arv_camera_stop_acquisition(cam, NULL);
+			// g_object_unref(stream);
+			// g_object_unref(cam);
+
+			// return 0;
+
+
+
+
+
+
+
+
+
+			CallBackData *data=new CallBackData();
+			data->buffer=buffers[i];
+			data->cam=camera[i];
+			data->stream=streams[i];
+			data->img_src=&img_src;
+			data->index=i;
+
+
+			g_signal_connect(streams[i], "new-buffer", G_CALLBACK(CImageEventPrinter::OnImageGrabbed), data);
+			arv_stream_set_emit_signals(streams[i],true);
+
+							arv_camera_start_acquisition(cam,&error);		
+			CHECK_ERROR(error, "Failed to start acquisiton");
 			
 
 				
@@ -326,6 +363,9 @@ void ExtTrig::SoftTrigger(int id){
 
 		try{
 			if(camera[j]){
+				arv_camera_software_trigger(camera[0], &error);
+				cerr <<"Hard coded"<<endl;
+
 					
 				string sr_no=String(arv_camera_get_device_serial_number(camera[j],&error));
 				CHECK_ERROR(error, "Cant get Serial Number of camera");
@@ -333,6 +373,7 @@ void ExtTrig::SoftTrigger(int id){
 				if(String(img_src[id].cam_sr_no)==sr_no){
 						
 					arv_camera_software_trigger(camera[j], &error);
+					cerr <<"REACHED TRIGGERRRR"<<endl;
 					CHECK_ERROR(error, "SoftTrigger Error");
 				}
 			}

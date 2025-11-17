@@ -1,10 +1,10 @@
 cc = g++
 
 # Compiler flags
-flags = -Wall -O2 -I./header $(shell pkg-config --cflags opencv4 aravis-0.10)
+flags = -Wall -O2 -I./header $(shell pkg-config --cflags opencv4 aravis-0.8)
 
 # Libraries (pkg-config + explicit libusb)
-libs = $(shell pkg-config --libs opencv4 aravis-0.10) -lusb-1.0
+libs = $(shell pkg-config --libs opencv4 aravis-0.8) -lusb-1.0
 
 # Source and header files
 Source = src/ExtTrig.cpp
